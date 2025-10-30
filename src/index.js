@@ -2,8 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import authRoutes from './auth/auth.routes.js';
-import userRoutes from './routes/user.routes.js';
+import authRoutes from '../auth/auth.routes.js';
+import userRoutes from '../routes/user.routes.js';
 
 const app = express();
 app.use(helmet());
