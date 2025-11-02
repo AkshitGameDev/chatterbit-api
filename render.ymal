@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: chatterbit-api
+    env: node
+    plan: free
+    buildCommand: npm ci && npm run migrate:deploy
+    startCommand: node src/index.js
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
