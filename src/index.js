@@ -7,8 +7,10 @@ import userRoutes from '../routes/user.routes.js';
 import { prisma } from '../lib/prisma.js';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import { env } from './env.js';
 
 const app = express();
+const port = env.PORT;
 
 app.use(morgan('tiny'));
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
@@ -33,4 +35,4 @@ prisma.$connect()
 
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(` API running at http://localhost:${PORT}`));
+app.listen(port, () => console.log(` API running at http://localhost:${port}`));
