@@ -8,10 +8,12 @@ import { prisma } from '../lib/prisma.js';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import { env } from './env.js';
+import heartbeatRoutes from "../routes/heartbeat.routes.js";
 
 const app = express();
 const port = env.PORT;
 
+app.use("/heartbeat", heartbeatRoutes);
 app.use(morgan('tiny'));
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 app.use(helmet());
