@@ -6,9 +6,6 @@ yarn-error.log
 
 .env
 
-prisma/migrations/
-.prisma
-
 # macOS
 .DS_Store
 
