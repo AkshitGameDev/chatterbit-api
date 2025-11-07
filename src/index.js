@@ -9,11 +9,13 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import { env } from './env.js';
 import heartbeatRoutes from "../routes/heartbeat.routes.js";
+import chatRoutes from '../routes/chat.routes.js';
 
 const app = express();
 const port = env.PORT;
 
 app.use("/heartbeat", heartbeatRoutes);
+app.use('/chat', chatRoutes);
 app.use(morgan('tiny'));
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 app.use(helmet());
