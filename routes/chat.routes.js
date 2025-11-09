@@ -1,11 +1,18 @@
 import express from 'express';
 import { prisma } from '../lib/prisma.js';
-import { auth } from '../middleware/auth.js'; // you already have similar in user.routes
+import { auth } from '../middleware/auth.js';
 import OpenAI from 'openai';
 
 const router = express.Router();
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// make client only if key exists (so local dev doesn’t crash)
+const hasAI = !!process.env.OPENAI_API_KEY;
+const openai = hasAI ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+
+/**
+ * GET /chat/conversations
+ * list current user's conversations
+ */
 router.get('/conversations', auth, async (req, res, next) => {
   try {
     const convos = await prisma.conversation.findMany({
@@ -14,9 +21,15 @@ router.get('/conversations', auth, async (req, res, next) => {
       select: { id: true, title: true, createdAt: true },
     });
     res.json({ conversations: convos });
-  } catch (e) { next(e); }
+  } catch (e) {
+    next(e);
+  }
 });
 
+/**
+ * POST /chat/conversations
+ * create a new conversation
+ */
 router.post('/conversations', auth, async (req, res, next) => {
   try {
     const { title } = req.body || {};
@@ -28,12 +41,20 @@ router.post('/conversations', auth, async (req, res, next) => {
       select: { id: true, title: true, createdAt: true },
     });
     res.status(201).json({ conversation: convo });
-  } catch (e) { next(e); }
+  } catch (e) {
+    next(e);
+  }
 });
 
+/**
+ * GET /chat/conversations/:id/messages
+ * get all messages for a conversation
+ */
 router.get('/conversations/:id/messages', auth, async (req, res, next) => {
   try {
     const convoId = req.params.id;
+
+    // ensure convo belongs to user
     const convo = await prisma.conversation.findFirst({
       where: { id: convoId, userId: req.userId },
     });
@@ -43,24 +64,34 @@ router.get('/conversations/:id/messages', auth, async (req, res, next) => {
       where: { conversationId: convoId },
       orderBy: { createdAt: 'asc' },
     });
+
     res.json({ messages });
-  } catch (e) { next(e); }
+  } catch (e) {
+    next(e);
+  }
 });
 
+/**
+ * POST /chat/conversations/:id/messages
+ * user sends a message, we save it, call OpenAI, save reply, return reply
+ */
 router.post('/conversations/:id/messages', auth, async (req, res, next) => {
   try {
     const convoId = req.params.id;
     const { content } = req.body || {};
-    if (!content) return res.status(400).json({ error: 'content required' });
 
-    // check ownership
+    if (!content) {
+      return res.status(400).json({ error: 'content required' });
+    }
+
+    // ensure convo belongs to user
     const convo = await prisma.conversation.findFirst({
       where: { id: convoId, userId: req.userId },
     });
     if (!convo) return res.status(404).json({ error: 'Not found' });
 
-    // save user message
-    const userMsg = await prisma.message.create({
+    // 1) store user's message
+    await prisma.message.create({
       data: {
         conversationId: convoId,
         role: 'user',
@@ -68,25 +99,43 @@ router.post('/conversations/:id/messages', auth, async (req, res, next) => {
       },
     });
 
-    // fetch last messages to give context to the model (simple, can improve later)
+    // 2) build chat history for context
     const history = await prisma.message.findMany({
       where: { conversationId: convoId },
       orderBy: { createdAt: 'asc' },
-      take: 12,
+      take: 12, // keep it small for now
     });
 
-    // call OpenAI
-    const completion = await client.chat.completions.create({
+    // 3) if no OpenAI key, return dummy reply
+    if (!hasAI || !openai) {
+      const assistantMsg = await prisma.message.create({
+        data: {
+          conversationId: convoId,
+          role: 'assistant',
+          content:
+            '🤖 AI not configured on this server yet. Add OPENAI_API_KEY to enable real replies.',
+        },
+      });
+      return res.status(201).json({ message: assistantMsg });
+    }
+
+    // 4) call OpenAI
+    const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: 'You are a helpful chatbot for Chatterbit.' },
-        ...history.map(m => ({ role: m.role, content: m.content })),
+        { role: 'system', content: 'You are the Chatterbit assistant.' },
+        ...history.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
       ],
     });
 
-    const replyText = completion.choices[0]?.message?.content ?? '...';
+    const replyText =
+      completion.choices?.[0]?.message?.content ||
+      'Sorry, I could not generate a response.';
 
-    // save assistant message
+    // 5) store assistant message
     const assistantMsg = await prisma.message.create({
       data: {
         conversationId: convoId,
@@ -97,7 +146,7 @@ router.post('/conversations/:id/messages', auth, async (req, res, next) => {
 
     res.status(201).json({ message: assistantMsg });
   } catch (e) {
-    console.error('[chat]', e);
+    console.error('[chat] error', e);
     next(e);
   }
 });
